@@ -188,6 +188,11 @@ def analisar(video: Path) -> InfoVideo:
     )
 
 
+def nao_precisa_ampliar(largura: int, altura: int, lado_menor: int) -> bool:
+    """O video ja tem a resolucao final ou mais: ampliar nao melhora nada e pesa muito."""
+    return min(largura, altura) >= lado_menor
+
+
 def estimar_segundos(modo: str, quadros: float, largura: int = 854, altura: int = 480) -> float:
     """Tempo aproximado de processamento, a partir da velocidade medida em 854x480."""
     return quadros * (largura * altura) / (854 * 480) / MODOS[modo][2]
@@ -432,6 +437,8 @@ def _cli() -> int:
     ap.add_argument("--teste", type=float, metavar="SEG", help="processa só os primeiros SEG segundos")
     ap.add_argument("--sem-correcao-de-cor", action="store_true",
                     help="não devolve ao resultado as cores do vídeo original")
+    ap.add_argument("--mesmo-assim", action="store_true",
+                    help="processa também vídeos que já têm a resolução final ou mais")
     args = ap.parse_args()
     for fluxo in (sys.stdout, sys.stderr):
         if hasattr(fluxo, "reconfigure"):
@@ -450,6 +457,12 @@ def _cli() -> int:
     for video in args.videos:
         destino = nome_saida(video, args.altura, args.pasta, "_teste" if args.teste else "")
         try:
+            info = analisar(video)
+            if nao_precisa_ampliar(info.largura, info.altura, args.altura) and not args.mesmo_assim:
+                print(f"PULADO: {video.name} já tem {info.largura}x{info.altura}, igual ou maior que "
+                      f"{args.altura}p. Ampliar não melhora a qualidade e é muito pesado. "
+                      "Para processar assim mesmo, use --mesmo-assim.")
+                continue
             ampliar(video, destino, args.altura, args.modo, mostrar, limite_segundos=args.teste,
                     manter_cores=not args.sem_correcao_de_cor)
         except ErroUpscale as e:

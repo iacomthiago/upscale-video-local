@@ -19,6 +19,7 @@ DESTAQUE = "#7c5cff"
 DESTAQUE2 = "#9279ff"
 OK = "#3ecf8e"
 ERRO = "#ff6b6b"
+AVISO = "#f5b84a"
 FONTE = "Segoe UI"
 
 _escala = 1.0

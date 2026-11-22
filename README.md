@@ -68,7 +68,7 @@ Não há bibliotecas Python para instalar.
 python upscaler.py video.mp4 --altura 1080 --modo realista_rapido
 ```
 
-Opções: `--altura 720|1080|1440`, `--modo rapido|realista_rapido|anime|realista`, `--pasta PASTA`, `--teste SEGUNDOS`, `--sem-correcao-de-cor`.
+Opções: `--altura 720|1080|1440`, `--modo rapido|realista_rapido|anime|realista`, `--pasta PASTA`, `--teste SEGUNDOS`, `--sem-correcao-de-cor`, `--mesmo-assim`.
 
 ## Como funciona
 
@@ -89,6 +89,7 @@ O aplicativo confere a integridade (SHA-256) de cada arquivo baixado.
 
 ## Limites
 
+- Vídeo que já tem a resolução final ou mais (por exemplo, um 4K para sair em 1080p) não ganha nada com upscale e fica pesadíssimo de processar. O aplicativo avisa e só segue se você confirmar. Se o vídeo é um 480p esticado na exportação, amplie o 480p original.
 - Upscale melhora nitidez e contorno, mas não inventa detalhe que o vídeo original não tem. Um 480p ampliado fica bem melhor que o 480p esticado, e ainda um pouco abaixo de um vídeo gerado nativamente em 1080p. Pelo mesmo motivo, ampliar um 480p até 4K não traz ganho visível sobre 1080p.
 - A ampliação é quadro a quadro. Em cenas com muito ruído ou textura fina pode aparecer uma leve cintilação, mais nos modos realistas.
 - Durante o processamento a placa de vídeo trabalha a 100%, como em um jogo pesado. É uso normal, mas o computador fica mais lento para outras tarefas.
