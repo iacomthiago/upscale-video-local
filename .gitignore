@@ -1,0 +1,4 @@
+motor/
+__pycache__/
+*.pyc
+*.parcial.mp4

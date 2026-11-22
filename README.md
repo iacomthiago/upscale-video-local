@@ -1,0 +1,58 @@
+# Upscale de Vídeo Local
+
+Aplicativo para Windows que amplia vídeos de 480p para 1080p (ou 720p / 1440p) direto na placa de vídeo do computador, sem custo por vídeo e sem enviar nada para a internet.
+
+Feito para vídeos gerados por IA em baixa resolução: você gera em 480p, que é barato, e amplia aqui.
+
+## Como usar
+
+1. Dê dois cliques em `Iniciar.bat` (ou arraste os vídeos em cima dele).
+2. Na primeira vez, o aplicativo pede para baixar o motor de upscale (≈ 43 MB). Aceite.
+3. Clique em **Adicionar vídeos...**, escolha a resolução e a qualidade, e clique em **Começar**.
+
+O resultado é salvo ao lado do original com o final `_1080p.mp4`. O original nunca é alterado nem sobrescrito. O áudio é mantido.
+
+Dica: marque **Teste** para processar só os 3 primeiros segundos e comparar os modos de qualidade antes de rodar o vídeo inteiro.
+
+## Modos de qualidade
+
+Tempos medidos em uma Radeon RX 7600, vídeo 480p a 24 quadros por segundo:
+
+| Modo | Para quê | Clipe de 10 s leva |
+|---|---|---|
+| Rápido | Uso geral, anime e estilizado | ≈ 40 s |
+| Anime detalhado | Anime com traço mais limpo | ≈ 4 min |
+| Realista | Pele, tecido, cenário real | ≈ 13 min |
+
+## O que precisa ter instalado
+
+- Windows 10 ou 11 com placa de vídeo com suporte a Vulkan (AMD, NVIDIA ou Intel, com driver atualizado)
+- [Python 3.9 ou mais novo](https://www.python.org/downloads/)
+- FFmpeg, que se instala com este comando no PowerShell:
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+Não há bibliotecas Python para instalar.
+
+## Linha de comando
+
+```powershell
+python upscaler.py video.mp4 --altura 1080 --modo rapido
+```
+
+Opções: `--altura 720|1080|1440`, `--modo rapido|anime|realista`, `--pasta PASTA`, `--teste SEGUNDOS`.
+
+## Como funciona
+
+1. O FFmpeg separa o vídeo em quadros PNG, sem perda.
+2. O [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (versão ncnn/Vulkan) amplia cada quadro na GPU, em lotes de 96 quadros para não lotar o disco.
+3. O FFmpeg ajusta para a resolução exata e grava um MP4 H.264 de alta qualidade (CRF 16) com o áudio original.
+
+O motor Real-ESRGAN é baixado da página oficial do projeto e fica na pasta `motor/`, que não faz parte deste repositório. Ele é distribuído pelos autores sob licença BSD de 3 cláusulas.
+
+## Limites
+
+- Upscale melhora nitidez e contorno, mas não inventa detalhe que o vídeo original não tem. Um 480p ampliado fica bem melhor que o 480p esticado, e ainda um pouco abaixo de um vídeo gerado nativamente em 1080p.
+- A ampliação é quadro a quadro. Em cenas com muito ruído ou textura fina pode aparecer uma leve cintilação, mais no modo Realista.
