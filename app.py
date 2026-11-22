@@ -74,7 +74,11 @@ class Linha:
             return
         i = self.info
         w, h = upscaler.calcular_saida(i.largura, i.altura, lado)
-        self.dados.configure(text=f"{i.largura}×{i.altura}  ·  {_duracao(i.duracao)}  →  {w}×{h}")
+        texto = f"{i.largura}×{i.altura}  ·  {_duracao(i.duracao)}  →  {w}×{h}"
+        grande = upscaler.nao_precisa_ampliar(i.largura, i.altura, lado)
+        if grande:
+            texto += "  ·  já tem essa resolução ou mais"
+        self.dados.configure(text=texto, fg=tema.AVISO if grande else tema.SUAVE)
 
     def marcar(self, texto: str, cor: str = tema.SUAVE) -> None:
         self.estado.configure(text=texto, fg=cor)
@@ -355,6 +359,8 @@ class App(tk.Tk):
         """Processa os primeiros segundos em todos os modos e abre a comparacao."""
         if self.trabalhando:
             return
+        if not self._confirmar_grandes([linha], list(upscaler.MODOS), SEGUNDOS_TESTE):
+            return
         if self.pasta_temp is None:
             self.pasta_temp = Path(tempfile.mkdtemp(prefix="upscale_comparar_"))
         self._iniciar_trabalho()
@@ -455,9 +461,40 @@ class App(tk.Tk):
         self.trabalhando = True
         self._travar(True)
 
+    def _confirmar_grandes(self, linhas, modos, limite) -> bool:
+        """Avisa quando algum video ja tem a resolucao final ou mais; so segue se a pessoa confirmar."""
+        lado = self.seg_resolucao.valor
+        grandes = [l for l in linhas
+                   if l.info and upscaler.nao_precisa_ampliar(l.info.largura, l.info.altura, lado)]
+        if not grandes:
+            return True
+        segundos = 0.0
+        for l in grandes:
+            quadros = (min(l.info.duracao, limite) if limite else l.info.duracao) * float(l.info.fps)
+            for modo in modos:
+                segundos += upscaler.estimar_segundos(modo, quadros, l.info.largura, l.info.altura)
+        nomes = "\n".join(f"•  {l.caminho.name}  ({l.info.largura}×{l.info.altura})" for l in grandes[:6])
+        if len(grandes) > 6:
+            nomes += f"\n•  e mais {len(grandes) - 6}"
+        um = len(grandes) == 1
+        return messagebox.askyesno(
+            "Vídeo já está nessa resolução",
+            f"{'Este vídeo já tem' if um else 'Estes vídeos já têm'} resolução igual ou maior "
+            f"que {lado}p:\n\n{nomes}\n\n"
+            "Ampliar não vai melhorar a qualidade: o resultado sai igual ou pior que o original.\n\n"
+            f"O processamento também fica muito pesado (pelo menos {upscaler.formatar_tempo(segundos)}, "
+            "com quadros enormes) e pode travar o computador.\n\n"
+            "Se o vídeo é um 480p que foi esticado na exportação, o caminho certo é ampliar "
+            "o 480p original.\n\n"
+            "Processar mesmo assim?",
+            icon="warning", default="no")
+
     def _comecar(self):
         if not self.linhas:
             messagebox.showinfo("Upscale de Vídeo", "Adicione pelo menos um vídeo.")
+            return
+        if not self._confirmar_grandes(self.linhas, [self.modo],
+                                       SEGUNDOS_TESTE if self.teste.get() else None):
             return
         self._iniciar_trabalho()
         self.b_abrir.ligar(False)
