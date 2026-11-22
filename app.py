@@ -12,6 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Optional
 
+import atualizar
 import tema
 import upscaler
 from comparar import Comparador
@@ -147,14 +148,19 @@ class App(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._fechar)
         self.after(100, self._ler_fila)
         self.after(300, self._conferir_motor)
+        if not atualizar.copia_de_desenvolvimento():
+            threading.Thread(target=self._conferir_versao, daemon=True).start()
 
     # ---------- interface ----------
     def _montar(self):
         raiz = tk.Frame(self, bg=tema.FUNDO, padx=px(22), pady=px(18))
         raiz.pack(fill="both", expand=True)
+        self.raiz_conteudo = raiz
 
         topo = tk.Frame(raiz, bg=tema.FUNDO)
         topo.pack(fill="x", pady=(0, px(14)))
+        self.topo = topo
+        tema.rotulo(topo, f"versão {atualizar.versao_local()}", 9, tema.APAGADO).pack(side="right", anchor="n")
         if self.icones:
             tk.Label(topo, image=self.icones[48], bg=tema.FUNDO, bd=0).pack(side="left", padx=(0, px(12)))
         nomes = tk.Frame(topo, bg=tema.FUNDO)
@@ -377,6 +383,48 @@ class App(tk.Tk):
             self.fila.put(("linha", linha, "O teste falhou.", tema.ERRO))
             self.fila.put(("fim_teste", "O teste falhou.", str(e)))
 
+    # ---------- atualizacao ----------
+    def _conferir_versao(self):
+        achado = atualizar.consultar()
+        if achado:
+            self.fila.put(("versao_nova", *achado))
+
+    def _mostrar_aviso(self, versao: str, novidades: list):
+        self.aviso = tk.Frame(self.raiz_conteudo, bg=tema.PAINEL2)
+        self.aviso.pack(fill="x", pady=(0, px(14)), after=self.topo)
+        tk.Frame(self.aviso, bg=tema.DESTAQUE, width=px(4)).pack(side="left", fill="y")
+        tema.rotulo(self.aviso, f"Saiu a versão {versao} do aplicativo.", 10, tema.TEXTO, "bold").pack(
+            side="left", padx=(px(12), 0), pady=px(10))
+        tema.Botao(self.aviso, "Depois", self.aviso.destroy, tamanho=9, pady=px(4)).pack(
+            side="right", padx=(0, px(10)))
+        self.b_atualizar = tema.Botao(self.aviso, "Ver novidades e atualizar",
+                                      lambda: self._atualizar(versao, novidades), "primario", 9,
+                                      pady=px(4))
+        self.b_atualizar.pack(side="right", padx=px(8))
+
+    def _atualizar(self, versao: str, novidades: list):
+        if self.trabalhando:
+            messagebox.showinfo("Upscale de Vídeo", "Espere o processamento terminar para atualizar.")
+            return
+        lista = "\n".join(f"•  {n}" for n in novidades) or "Melhorias gerais."
+        if not messagebox.askyesno(
+                "Atualizar o aplicativo",
+                f"A versão {versao} traz:\n\n{lista}\n\n"
+                "Atualizar agora? O aplicativo fecha e abre de novo, já na versão nova."):
+            return
+        self._iniciar_trabalho()
+        self.b_cancelar.ligar(False)
+        self.b_atualizar.ligar(False)
+        self.status.configure(text="Baixando a atualização...")
+
+        def baixar():
+            try:
+                self.fila.put(("atualizado", atualizar.instalar()))
+            except Exception as e:  # rede, disco, pacote com defeito
+                self.fila.put(("atualizar_erro", str(e)))
+
+        threading.Thread(target=baixar, daemon=True).start()
+
     # ---------- motor ----------
     def _conferir_motor(self):
         if upscaler.motor_instalado():
@@ -496,6 +544,16 @@ class App(tk.Tk):
                 janela = self.comparadores.get(linha.caminho)
                 if abrir or (janela is not None and janela.winfo_exists()):
                     self.abrir_comparador(linha)
+        elif tipo == "versao_nova":
+            self._mostrar_aviso(msg[1], msg[2])
+        elif tipo == "atualizado":
+            self.trabalhando = False
+            atualizar.reiniciar()
+            self._fechar()
+        elif tipo == "atualizar_erro":
+            self._livre("A atualização não foi concluída. O aplicativo continua na versão atual.")
+            self.b_atualizar.ligar(True)
+            messagebox.showerror("Upscale de Vídeo", msg[1][:1500])
         elif tipo == "motor_ok":
             self._livre("Motor instalado. Adicione os vídeos e clique em Começar.")
         elif tipo == "motor_erro":
