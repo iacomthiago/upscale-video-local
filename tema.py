@@ -32,6 +32,25 @@ def ativar_dpi() -> None:
         pass
 
 
+def identificar_app(identificador: str) -> None:
+    """Faz a barra de tarefas tratar a janela como aplicativo proprio, com o icone dela."""
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(identificador)
+    except (AttributeError, OSError):
+        pass
+
+
+def aplicar_icone(janela: tk.Tk, pasta) -> dict:
+    """Carrega o icone em todos os tamanhos e aplica nesta janela e nas proximas."""
+    try:
+        icones = {n: tk.PhotoImage(master=janela, file=str(pasta / f"icone_{n}.png"))
+                  for n in (256, 48, 32, 16)}
+    except tk.TclError:
+        return {}
+    janela.iconphoto(True, *icones.values())
+    return icones
+
+
 def px(n: float) -> int:
     return int(round(n * _escala))
 

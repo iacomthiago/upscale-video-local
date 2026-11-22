@@ -21,6 +21,7 @@ from upscaler import Cancelado, ErroUpscale, Progresso
 EXTENSOES = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
 RESOLUCOES = [(720, "720p  HD"), (1080, "1080p  Full HD"), (1440, "1440p  2K")]
 SEGUNDOS_TESTE = 3
+ASSINATURA = "@iacomthiago"
 MINIATURA = (96, 54)
 
 
@@ -98,7 +99,8 @@ class CartaoModo(tk.Frame):
         self.ativo = True
         self.titulo = tema.rotulo(self, upscaler.NOMES_MODOS[modo], 11, tema.TEXTO, "bold", anchor="w")
         self.titulo.pack(fill="x")
-        self.resumo = tema.rotulo(self, upscaler.RESUMO_MODOS[modo], 9, tema.SUAVE, anchor="w")
+        self.resumo = tema.rotulo(self, upscaler.RESUMO_MODOS[modo], 9, tema.SUAVE, anchor="nw",
+                                  justify="left", wraplength=px(168), height=2)
         self.resumo.pack(fill="x", pady=(px(2), px(8)))
         self.tempo = tema.rotulo(self, "", 9, tema.OK, anchor="w")
         self.tempo.pack(fill="x")
@@ -117,11 +119,12 @@ class CartaoModo(tk.Frame):
 class App(tk.Tk):
     def __init__(self, arquivos: list[str]):
         super().__init__()
-        self.title("Upscale de Vídeo")
+        self.title(f"Upscale de Vídeo — por {ASSINATURA}")
         tema.preparar(self)
-        altura = min(px(840), self.winfo_screenheight() - px(100))
-        self.geometry(f"{px(820)}x{altura}")
-        self.minsize(px(760), px(680))
+        self.icones = tema.aplicar_icone(self, upscaler.RAIZ / "icone")
+        altura = min(px(880), self.winfo_screenheight() - px(100))
+        self.geometry(f"{px(940)}x{altura}")
+        self.minsize(px(900), px(720))
 
         self.fila: "queue.Queue[tuple]" = queue.Queue()
         self.cancelar = threading.Event()
@@ -135,6 +138,7 @@ class App(tk.Tk):
 
         self.modo = "rapido"
         self.teste = tk.BooleanVar(value=False)
+        self.manter_cores = tk.BooleanVar(value=True)
 
         self._montar()
         for a in arquivos:
@@ -149,9 +153,19 @@ class App(tk.Tk):
         raiz = tk.Frame(self, bg=tema.FUNDO, padx=px(22), pady=px(18))
         raiz.pack(fill="both", expand=True)
 
-        tema.rotulo(raiz, "Upscale de Vídeo", 18, tema.TEXTO, "bold").pack(anchor="w")
-        tema.rotulo(raiz, "Amplie vídeos em baixa resolução direto na sua placa de vídeo.",
-                    10, tema.SUAVE).pack(anchor="w", pady=(0, px(14)))
+        topo = tk.Frame(raiz, bg=tema.FUNDO)
+        topo.pack(fill="x", pady=(0, px(14)))
+        if self.icones:
+            tk.Label(topo, image=self.icones[48], bg=tema.FUNDO, bd=0).pack(side="left", padx=(0, px(12)))
+        nomes = tk.Frame(topo, bg=tema.FUNDO)
+        nomes.pack(side="left")
+        linha = tk.Frame(nomes, bg=tema.FUNDO)
+        linha.pack(anchor="w")
+        tema.rotulo(linha, "Upscale de Vídeo", 18, tema.TEXTO, "bold").pack(side="left")
+        tema.rotulo(linha, f"por {ASSINATURA}", 11, tema.DESTAQUE2, "bold").pack(
+            side="left", anchor="s", padx=(px(10), 0), pady=(0, px(4)))
+        tema.rotulo(nomes, "Amplie vídeos em baixa resolução direto na sua placa de vídeo.",
+                    10, tema.SUAVE).pack(anchor="w")
 
         # --- rodape fixo: progresso e botoes (montado antes para nunca ser empurrado para fora)
         rodape = tk.Frame(raiz, bg=tema.FUNDO)
@@ -186,7 +200,10 @@ class App(tk.Tk):
         self.caixa_teste = tema.Caixa(
             raiz, f"Teste: processar só os primeiros {SEGUNDOS_TESTE} segundos de cada vídeo",
             self.teste, self._atualizar_estimativas)
-        self.caixa_teste.pack(side="bottom", anchor="w", pady=(px(14), 0))
+        self.caixa_teste.pack(side="bottom", anchor="w", pady=(px(8), 0))
+        self.caixa_cores = tema.Caixa(raiz, "Manter as cores do vídeo original (recomendado)",
+                                      self.manter_cores)
+        self.caixa_cores.pack(side="bottom", anchor="w", pady=(px(14), 0))
 
         cartoes = tk.Frame(raiz, bg=tema.FUNDO)
         cartoes.pack(side="bottom", fill="x")
@@ -229,6 +246,7 @@ class App(tk.Tk):
         self.b_cancelar.ligar(travado)
         self.seg_resolucao.ligar(livre)
         self.caixa_teste.ligar(livre)
+        self.caixa_cores.ligar(livre)
         for cartao in self.cartoes.values():
             cartao.ativo = livre
             cartao.pintar(cartao.modo == self.modo)
@@ -328,16 +346,16 @@ class App(tk.Tk):
         janela.focus_set()
 
     def testar_qualidades(self, linha: Linha):
-        """Processa os primeiros segundos nos tres modos e abre a comparacao."""
+        """Processa os primeiros segundos em todos os modos e abre a comparacao."""
         if self.trabalhando:
             return
         if self.pasta_temp is None:
             self.pasta_temp = Path(tempfile.mkdtemp(prefix="upscale_comparar_"))
         self._iniciar_trabalho()
         threading.Thread(target=self._trabalhar_teste, daemon=True,
-                         args=(linha, self.seg_resolucao.valor)).start()
+                         args=(linha, self.seg_resolucao.valor, self.manter_cores.get())).start()
 
-    def _trabalhar_teste(self, linha: Linha, lado: int):
+    def _trabalhar_teste(self, linha: Linha, lado: int, cores: bool):
         modos = list(upscaler.MODOS)
         self.fila.put(("linha", linha, "Testando as qualidades...", tema.SUAVE))
         try:
@@ -348,10 +366,10 @@ class App(tk.Tk):
                 prefixo = f"Teste de qualidades · {nome} ({n} de {len(modos)}) — "
                 upscaler.ampliar(linha.caminho, destino, lado, modo,
                                  lambda p, pre=prefixo: self.fila.put(("progresso", p, pre)),
-                                 self.cancelar, SEGUNDOS_TESTE)
+                                 self.cancelar, SEGUNDOS_TESTE, cores)
                 self.fila.put(("versao", linha, nome, destino, modo, n == 1))
             self.fila.put(("linha", linha, "Teste pronto. Compare em “Antes e depois”.", tema.OK))
-            self.fila.put(("fim_teste", "Teste das três qualidades pronto. A comparação está aberta."))
+            self.fila.put(("fim_teste", "Teste das qualidades pronto. A comparação está aberta."))
         except Cancelado:
             self.fila.put(("linha", linha, "Teste cancelado.", tema.SUAVE))
             self.fila.put(("fim_teste", "Teste cancelado."))
@@ -366,8 +384,8 @@ class App(tk.Tk):
             return
         if not messagebox.askyesno(
             "Instalar o motor de upscale",
-            "Na primeira vez é preciso baixar o motor Real-ESRGAN (≈ 43 MB), "
-            "da página oficial do projeto no GitHub.\n\nBaixar agora?"):
+            "É preciso baixar o motor de upscale Real-ESRGAN e os modelos (até 46 MB), "
+            "das páginas dos projetos no GitHub.\n\nBaixar agora?"):
             self._livre("Sem o motor não dá para ampliar. Feche e abra o aplicativo para baixar.")
             self.b_comecar.ligar(False)
             return
@@ -398,10 +416,11 @@ class App(tk.Tk):
         for linha in self.linhas:
             linha.marcar("Na fila")
         args = (list(self.linhas), self.seg_resolucao.valor, self.modo,
-                SEGUNDOS_TESTE if self.teste.get() else None, self.pasta_saida)
+                SEGUNDOS_TESTE if self.teste.get() else None, self.pasta_saida,
+                self.manter_cores.get())
         threading.Thread(target=self._trabalhar, args=args, daemon=True).start()
 
-    def _trabalhar(self, linhas, lado, modo, limite, pasta):
+    def _trabalhar(self, linhas, lado, modo, limite, pasta, cores):
         prontos, erros = [], []
         nome_modo = upscaler.NOMES_MODOS[modo]
         for n, linha in enumerate(linhas, 1):
@@ -412,7 +431,7 @@ class App(tk.Tk):
                 destino = upscaler.nome_saida(video, lado, pasta, "_teste" if limite else "")
                 upscaler.ampliar(video, destino, lado, modo,
                                  lambda p, pre=prefixo: self.fila.put(("progresso", p, pre)),
-                                 self.cancelar, limite)
+                                 self.cancelar, limite, cores)
                 prontos.append(destino)
                 self.fila.put(("versao", linha, f"{nome_modo} {lado}p", destino, None, False))
                 self.fila.put(("linha", linha, f"Pronto  ✓  {destino.name}", tema.OK))
@@ -526,4 +545,5 @@ class App(tk.Tk):
 
 if __name__ == "__main__":
     tema.ativar_dpi()
+    tema.identificar_app("iacomthiago.upscaledevideo")
     App(sys.argv[1:]).mainloop()

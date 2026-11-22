@@ -2,7 +2,7 @@
 na GPU e o ffmpeg remonta o video com o audio original.
 
 Uso pela linha de comando:
-    python upscaler.py video.mp4 [--altura 1080] [--modo rapido|anime|realista]
+    python upscaler.py video.mp4 [--altura 1080] [--modo rapido|realista_rapido|anime|realista]
 """
 from __future__ import annotations
 
@@ -34,17 +34,29 @@ URL_MOTOR = (
 )
 SHA256_MOTOR = "abc02804e17982a3be33675e4d471e91ea374e65b70167abc09e31acb412802d"
 
+# Modelos que nao vem no pacote oficial: (arquivo, sha256). Baixados de uma versao fixa do
+# repositorio upscayl/custom-models (conversoes para ncnn dos modelos oficiais do Real-ESRGAN).
+URL_EXTRAS = ("https://raw.githubusercontent.com/upscayl/custom-models/"
+              "4b6d2cfa59c7442af115dfc6e50fd8d7d40b96ef/models/")
+MODELOS_EXTRAS = [
+    ("RealESRGAN_General_x4_v3.bin", "85ee266b632a765a725425ba6a5620c088c8aa2939a03063b2d83b3462724cc1"),
+    ("RealESRGAN_General_x4_v3.param", "22174924330297357434ad21ed0af7f4b820008d2a502b492754d130d4142714"),
+]
+
 # modo -> (modelo, escalas nativas disponiveis, quadros/s medidos numa RX 7600 em 480p)
 MODOS = {
-    "rapido": ("realesr-animevideov3", (2, 3, 4), 6.0),
+    "rapido": ("realesr-animevideov3", (2, 3, 4), 7.0),
+    "realista_rapido": ("RealESRGAN_General_x4_v3", (4,), 4.5),
     "anime": ("realesrgan-x4plus-anime", (4,), 1.0),
     "realista": ("realesrgan-x4plus", (4,), 0.3),
 }
-NOMES_MODOS = {"rapido": "Rápido", "anime": "Anime detalhado", "realista": "Realista"}
+NOMES_MODOS = {"rapido": "Rápido", "realista_rapido": "Realista rápido",
+               "anime": "Anime detalhado", "realista": "Realista máximo"}
 RESUMO_MODOS = {
-    "rapido": "Uso geral, anime e estilizado",
+    "rapido": "Anime e vídeo estilizado",
+    "realista_rapido": "Imagem real, quase tão veloz quanto o Rápido",
     "anime": "Anime com traço mais limpo",
-    "realista": "Pele, tecido e cenário real",
+    "realista": "Imagem real no máximo de detalhe; bem lento",
 }
 
 QUADROS_POR_LOTE = 96
@@ -78,18 +90,20 @@ class Progresso:
     restante_s: Optional[float] = None
 
 
+def _faltam_extras() -> list:
+    return [(nome, sha) for nome, sha in MODELOS_EXTRAS if not (PASTA_MOTOR / "models" / nome).exists()]
+
+
 def motor_instalado() -> bool:
-    return EXE_MOTOR.exists() and (PASTA_MOTOR / "models").is_dir()
+    return EXE_MOTOR.exists() and (PASTA_MOTOR / "models").is_dir() and not _faltam_extras()
 
 
-def instalar_motor(progresso: Optional[Callable[[Progresso], None]] = None) -> None:
-    """Baixa o Real-ESRGAN oficial (≈ 43 MB) e confere a integridade do arquivo."""
-    PASTA_MOTOR.mkdir(exist_ok=True)
-    zip_path = PASTA_MOTOR / "motor.zip"
+def _baixar(url: str, destino: Path, sha256: str, etapa: str,
+            progresso: Optional[Callable[["Progresso"], None]]) -> None:
+    req = urllib.request.Request(url, headers={"User-Agent": "upscale-video-local"})
+    sha = hashlib.sha256()
     try:
-        req = urllib.request.Request(URL_MOTOR, headers={"User-Agent": "upscale-video-local"})
-        sha = hashlib.sha256()
-        with urllib.request.urlopen(req, timeout=60) as resp, open(zip_path, "wb") as f:
+        with urllib.request.urlopen(req, timeout=60) as resp, open(destino, "wb") as f:
             total = int(resp.headers.get("Content-Length") or 0)
             feitos = 0
             while True:
@@ -100,15 +114,31 @@ def instalar_motor(progresso: Optional[Callable[[Progresso], None]] = None) -> N
                 sha.update(bloco)
                 feitos += len(bloco)
                 if progresso:
-                    progresso(Progresso("Baixando o motor de upscale", feitos, total))
-        if sha.hexdigest() != SHA256_MOTOR:
-            raise ErroUpscale("O arquivo do motor baixado não confere com o original. Tente de novo.")
-        with zipfile.ZipFile(zip_path) as z:
-            z.extractall(PASTA_MOTOR)
-    finally:
-        zip_path.unlink(missing_ok=True)
+                    progresso(Progresso(etapa, feitos, total))
+        if sha.hexdigest() != sha256:
+            raise ErroUpscale(f"O arquivo {destino.name} baixado não confere com o original. Tente de novo.")
+    except BaseException:
+        destino.unlink(missing_ok=True)
+        raise
+
+
+def instalar_motor(progresso: Optional[Callable[[Progresso], None]] = None) -> None:
+    """Baixa o que faltar: o Real-ESRGAN oficial (cerca de 43 MB) e o modelo realista rapido (2 MB)."""
+    PASTA_MOTOR.mkdir(exist_ok=True)
+    if not EXE_MOTOR.exists():
+        zip_path = PASTA_MOTOR / "motor.zip"
+        try:
+            _baixar(URL_MOTOR, zip_path, SHA256_MOTOR, "Baixando o motor de upscale", progresso)
+            with zipfile.ZipFile(zip_path) as z:
+                z.extractall(PASTA_MOTOR)
+        finally:
+            zip_path.unlink(missing_ok=True)
+    for nome, sha in _faltam_extras():
+        temporario = PASTA_MOTOR / "models" / (nome + ".baixando")
+        _baixar(URL_EXTRAS + nome, temporario, sha, "Baixando o modelo realista rápido", progresso)
+        os.replace(temporario, PASTA_MOTOR / "models" / nome)
     if not motor_instalado():
-        raise ErroUpscale("O motor foi baixado, mas o executável não apareceu na pasta 'motor'.")
+        raise ErroUpscale("O motor foi baixado, mas ficou incompleto na pasta 'motor'.")
 
 
 def _ferramenta(nome: str) -> str:
@@ -241,6 +271,7 @@ def ampliar(
     progresso: Optional[Callable[[Progresso], None]] = None,
     cancelar: Optional[threading.Event] = None,
     limite_segundos: Optional[float] = None,
+    manter_cores: bool = True,
 ) -> Path:
     """Amplia `video` e grava em `destino`. Devolve o caminho do arquivo final."""
     if modo not in MODOS:
@@ -289,16 +320,33 @@ def ampliar(
         modelo = MODOS[modo][0]
 
         # 2) Codificador: recebe os quadros ampliados por um canal e ja grava o MP4 final.
-        audio_in, audio_out = [], []
+        audio_out = []
         if info.codec_audio:
-            audio_in = [*corte, "-i", str(video)]
             copia = info.codec_audio in ("aac", "mp3", "ac3", "eac3")
             audio_out = ["-map", "1:a:0", "-c:a", *(["copy"] if copia else ["aac", "-b:a", "256k"])]
+        tamanho = f"scale={larg_final}:{alt_final}:flags=lanczos+accurate_rnd+full_chroma_int"
+        saida_cor = "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p"
+        if manter_cores:
+            # Os modelos deslocam um pouco a cor. Aqui a cor "de longe" (baixa frequencia) volta
+            # a ser a do original, e o detalhe fino continua sendo o do upscale:
+            #   resultado = ampliado + borrado(original - ampliado)
+            lp, ap = _par(larg_final / 8), _par(alt_final / 8)
+            relogio = f"setpts=N/({info.fps})/TB"
+            filtro = (
+                f"[0:v]{relogio},{tamanho},format=gbrp,split[amp][amp2];"
+                f"[amp2]scale={lp}:{ap}:flags=area[amp_p];"
+                f"[1:v]fps={info.fps},{relogio},scale={lp}:{ap}:flags=area:"
+                f"in_color_matrix={info.matriz_cor}:in_range={info.faixa_cor},format=gbrp[ori_p];"
+                "[ori_p][amp_p]blend=all_mode=grainextract,gblur=sigma=2,"
+                f"scale={larg_final}:{alt_final}:flags=bicubic[dif];"
+                f"[amp][dif]blend=all_mode=grainmerge,{saida_cor}[v]"
+            )
+        else:
+            filtro = f"[0:v]{tamanho},{saida_cor}[v]"
         cmd = [ffmpeg, "-v", "error", "-y",
                "-f", "image2pipe", "-framerate", str(info.fps), "-c:v", "png", "-i", "-",
-               *audio_in, "-map", "0:v:0", *audio_out,
-               "-vf", (f"scale={larg_final}:{alt_final}:flags=lanczos+accurate_rnd+full_chroma_int:"
-                       "out_color_matrix=bt709:out_range=tv,format=yuv420p"),
+               *corte, "-i", str(video),
+               "-filter_complex", filtro, "-map", "[v]", *audio_out,
                "-c:v", "libx264", "-preset", "medium", "-crf", "16",
                "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
                "-color_range", "tv", "-movflags", "+faststart", "-shortest", str(parcial)]
@@ -319,7 +367,7 @@ def ampliar(
             with open(tmp / "motor.log", "wb") as log:
                 motor = subprocess.Popen(
                     [str(EXE_MOTOR), "-i", str(lote_in), "-o", str(lote_out),
-                     "-n", modelo, "-s", str(escala), "-f", "png", "-j", "2:2:2"],
+                     "-n", modelo, "-s", str(escala), "-f", "png", "-j", "2:2:4"],
                     stdout=log, stderr=log, cwd=str(PASTA_MOTOR), creationflags=SEM_JANELA)
                 while motor.poll() is None:
                     if cancelar.is_set():
@@ -382,6 +430,8 @@ def _cli() -> int:
     ap.add_argument("--modo", choices=list(MODOS), default="rapido")
     ap.add_argument("--pasta", type=Path, help="pasta de saída (padrão: a mesma do vídeo)")
     ap.add_argument("--teste", type=float, metavar="SEG", help="processa só os primeiros SEG segundos")
+    ap.add_argument("--sem-correcao-de-cor", action="store_true",
+                    help="não devolve ao resultado as cores do vídeo original")
     args = ap.parse_args()
     for fluxo in (sys.stdout, sys.stderr):
         if hasattr(fluxo, "reconfigure"):
@@ -400,7 +450,8 @@ def _cli() -> int:
     for video in args.videos:
         destino = nome_saida(video, args.altura, args.pasta, "_teste" if args.teste else "")
         try:
-            ampliar(video, destino, args.altura, args.modo, mostrar, limite_segundos=args.teste)
+            ampliar(video, destino, args.altura, args.modo, mostrar, limite_segundos=args.teste,
+                    manter_cores=not args.sem_correcao_de_cor)
         except ErroUpscale as e:
             print(f"\nERRO em {video.name}: {e}")
             return 1
