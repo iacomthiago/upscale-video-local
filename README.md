@@ -46,6 +46,10 @@ A comparação não toca o áudio.
 
 Dica: a caixa **Teste** processa só os 3 primeiros segundos de cada vídeo da lista no modo escolhido.
 
+## Atualizações
+
+Ao abrir, o aplicativo confere no GitHub se saiu versão nova. Se saiu, aparece um aviso no topo com o botão **Ver novidades e atualizar**: ele mostra o que mudou, baixa a versão nova, instala por cima e reabre o aplicativo. O motor e os modelos já baixados são mantidos. A checagem só lê o arquivo `VERSAO.txt` do repositório; nada do seu computador é enviado.
+
 ## O que precisa ter instalado
 
 - Windows 10 ou 11 com placa de vídeo com suporte a Vulkan (AMD, NVIDIA ou Intel, com driver atualizado)
@@ -72,7 +76,7 @@ Opções: `--altura 720|1080|1440`, `--modo rapido|realista_rapido|anime|realist
 2. O [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (versão ncnn/Vulkan) amplia cada quadro na GPU, em lotes de 96 quadros para não lotar o disco.
 3. O FFmpeg ajusta para a resolução exata, devolve as cores do original e grava um MP4 H.264 de alta qualidade (CRF 16) com o áudio original.
 
-Arquivos: `upscaler.py` faz o processamento, `app.py` é a janela principal, `comparar.py` é a tela de comparação, `tema.py` guarda as cores e os componentes visuais e `icone/` tem o ícone e o script que o desenha.
+Arquivos: `upscaler.py` faz o processamento, `app.py` é a janela principal, `comparar.py` é a tela de comparação, `tema.py` guarda as cores e os componentes visuais, `atualizar.py` cuida do aviso de versão nova e `icone/` tem o ícone e o script que o desenha.
 
 ## Créditos dos componentes baixados
 
