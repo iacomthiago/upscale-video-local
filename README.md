@@ -12,7 +12,16 @@ Feito para vídeos gerados por IA em baixa resolução: você gera em 480p, que 
 
 O resultado é salvo ao lado do original com o final `_1080p.mp4`. O original nunca é alterado nem sobrescrito. O áudio é mantido.
 
-Dica: marque **Teste** para processar só os 3 primeiros segundos e comparar os modos de qualidade antes de rodar o vídeo inteiro.
+## Comparar antes de decidir
+
+Cada vídeo da lista tem dois botões:
+
+- **Testar qualidades** processa os 3 primeiros segundos nos três modos e abre a tela de comparação. Ela abre assim que o modo Rápido fica pronto; os outros dois entram sozinhos quando terminam.
+- **Antes e depois** aparece quando o vídeo já tem algum resultado e abre a mesma tela com o original e o que foi gerado.
+
+Na tela de comparação os dois lados tocam em sincronia, quadro a quadro. Você escolhe o que vai em cada lado (Original, Rápido, Anime detalhado, Realista), pausa com a barra de espaço, anda um quadro por vez com as setas e usa o zoom (100%, 200%, 400%) para enxergar a nitidez de perto, arrastando a imagem para olhar outra parte. O original aparece esticado até o tamanho do resultado, como um player faria. O botão **Usar ...** marca a qualidade escolhida na janela principal.
+
+A comparação não toca o áudio.
 
 ## Modos de qualidade
 
@@ -49,6 +58,8 @@ Opções: `--altura 720|1080|1440`, `--modo rapido|anime|realista`, `--pasta PAS
 1. O FFmpeg separa o vídeo em quadros PNG, sem perda.
 2. O [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (versão ncnn/Vulkan) amplia cada quadro na GPU, em lotes de 96 quadros para não lotar o disco.
 3. O FFmpeg ajusta para a resolução exata e grava um MP4 H.264 de alta qualidade (CRF 16) com o áudio original.
+
+Arquivos: `upscaler.py` faz o processamento, `app.py` é a janela principal, `comparar.py` é a tela de comparação e `tema.py` guarda as cores e os componentes visuais.
 
 O motor Real-ESRGAN é baixado da página oficial do projeto e fica na pasta `motor/`, que não faz parte deste repositório. Ele é distribuído pelos autores sob licença BSD de 3 cláusulas.
 

@@ -40,10 +40,11 @@ MODOS = {
     "anime": ("realesrgan-x4plus-anime", (4,), 1.0),
     "realista": ("realesrgan-x4plus", (4,), 0.3),
 }
-DESCRICAO_MODOS = {
-    "rapido": "Rápido — bom para a maioria dos vídeos (≈ 6 quadros/s)",
-    "anime": "Anime detalhado — traço mais limpo (≈ 1 quadro/s)",
-    "realista": "Realista — pele, tecido, cenário real (≈ 0,3 quadro/s)",
+NOMES_MODOS = {"rapido": "Rápido", "anime": "Anime detalhado", "realista": "Realista"}
+RESUMO_MODOS = {
+    "rapido": "Uso geral, anime e estilizado",
+    "anime": "Anime com traço mais limpo",
+    "realista": "Pele, tecido e cenário real",
 }
 
 QUADROS_POR_LOTE = 96
@@ -155,6 +156,23 @@ def analisar(video: Path) -> InfoVideo:
         matriz_cor=matriz, faixa_cor=faixa,
         codec_audio=a.get("codec_name") if a else None,
     )
+
+
+def estimar_segundos(modo: str, quadros: float, largura: int = 854, altura: int = 480) -> float:
+    """Tempo aproximado de processamento, a partir da velocidade medida em 854x480."""
+    return quadros * (largura * altura) / (854 * 480) / MODOS[modo][2]
+
+
+def miniatura(video: Path, largura: int, altura: int, cor_fundo: str = "272a37") -> bytes:
+    """Um quadro do video em PNG, ja no tamanho da miniatura."""
+    saida = subprocess.run(
+        [_ferramenta("ffmpeg"), "-v", "error", "-ss", "0.5", "-i", str(video), "-frames:v", "1",
+         "-vf", (f"scale={largura}:{altura}:force_original_aspect_ratio=decrease,"
+                 f"pad={largura}:{altura}:(ow-iw)/2:(oh-ih)/2:color=0x{cor_fundo}"),
+         "-f", "image2pipe", "-c:v", "png", "-"],
+        capture_output=True, creationflags=SEM_JANELA,
+    )
+    return saida.stdout if saida.returncode == 0 else b""
 
 
 def _tamanho_png(arquivo: Path) -> tuple[int, int]:
