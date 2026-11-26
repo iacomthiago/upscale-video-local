@@ -354,7 +354,7 @@ def ampliar(
                "-filter_complex", filtro, "-map", "[v]", *audio_out,
                "-c:v", "libx264", "-preset", "medium", "-crf", "16",
                "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-               "-color_range", "tv", "-movflags", "+faststart", "-shortest", str(parcial)]
+               "-color_range", "tv", "-movflags", "+faststart", str(parcial)]
         log_cod = open(tmp / "codificar.log", "wb")
         codificador = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=log_cod, stderr=log_cod,
                                        creationflags=SEM_JANELA)
