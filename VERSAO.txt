@@ -1,2 +1,2 @@
-1.3.1
-Aviso com pedido de confirmação quando o vídeo já tem a resolução final ou mais.
+1.3.2
+Corrige o corte de alguns quadros no fim do vídeo quando o áudio era mais curto que a imagem.
